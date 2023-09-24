@@ -4,3 +4,4 @@ beautifulsoup4
 googletrans==4.0.0-rc1
 openpyxl
 psycopg2-binary
+pycbrf
