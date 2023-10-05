@@ -2,7 +2,6 @@ import psycopg2
 import logs
 
 from database.credentials import host, user, password, db_name
-from data_parser.parser import create_driver, kill_driver, get_htmlsoup, translate_text, HOST
 
 
 # получение соединения с БД
@@ -61,6 +60,48 @@ def execute_querry(querry, data_returned=True):
         return None
 
 
+# получение словаря с моделями из БД
+def read_models_from_db():
+    # получение марок из БД
+    producers_li = execute_querry("SELECT producer from vehicles_models;")
+
+    # получение моделей из БД
+    models_li = execute_querry("SELECT model from vehicles_models;")
+
+    if producers_li and models_li:
+        # инициализация словаря формата - модель: [марка_модели1, марка_модели2, ...]
+        producers_models_data = {producer: [] for producer in set(producers_li)}
+
+        # заполнение словаря моделями
+        for indx in range(len(producers_li)):
+            producers_models_data[producers_li[indx]].append(models_li[indx])
+
+        return producers_models_data
+    else:
+        print('Error while trying to read models or producer in read_models_from_db().')
+        return None
+
+
+# возвращает элемент array, который встречается раньше всех в string (определение производителя и модели)
+def find_first_occurrence(string, array):
+    first_index = len(string) + 1
+    size = 0
+    result = None
+
+    for item in array:
+        index = string.find(item)
+        if index != -1 and index < first_index:
+            first_index = index
+            size = len(item)
+            result = item
+        elif index == first_index and len(item) > size:
+            first_index = index
+            size = len(item)
+            result = item
+
+    return result
+
+
 # запись данных машины в БД
 def write_productdata_to_db(product_data):
     # получаем соединение
@@ -77,25 +118,23 @@ def write_productdata_to_db(product_data):
             total_price = product_data['PriceRU']
             price_ch = product_data['PriceCH']
 
-            # todo ПРОИЗВОДИТЕЛЬ И МОДЕЛЬ
-            producer = model = 'NULL'
+            # ПРОИЗВОДИТЕЛЬ И МОДЕЛЬ
+            all_models_dict = read_models_from_db()
 
-            # all_models_dict = read_models_from_db()
-            # make = ' '
-            # product_model = ' '
-            # 
-            # for make in all_models_dict:
-            #     if make in name.split():
-            #         make = make
-            #         product_model = find_first_occurrence(name,  all_models_dict.get(make, []))
-
-            # if not producer:
-            #     print("[WRITE DATA TO DB] Couldn't find model.")
-            #     connection.commit()
-            #     # прикрываем соединение
-            #     connection.close()
-            #     print("[PostGreSQL INFO] Connection closed.")
-            #     return None
+            producer = product_data['Producer']
+            model = find_first_occurrence(name, all_models_dict.get(producer, []))
+            if not model:
+                if product_data['TMP_model']:
+                    model = product_data['TMP_model']
+                else:
+                    print("[WRITE DATA TO DB] Couldn't find model.")
+                    logs.log_warning(f"[WRITE DATA TO DB] Couldn't find model. ({name})")
+                    connection.commit()
+                    # прикрываем соединение
+                    connection.close()
+                    print("[PostGreSQL INFO] Connection closed.")
+                    logs.log_info("[PostGreSQL INFO] Connection closed.")
+                    return None
 
             # DEALER DATA
             dealer_data = product_data['DealerData']
@@ -309,55 +348,3 @@ def write_productdata_to_db(product_data):
     else:
         print("[PostGreSQL INFO] Error, couldn't get connection...")
         logs.log_error("[PostGreSQL INFO] Error, couldn't get connection...")
-
-
-# заполнение таблицы производителей-моделей
-def parse_and_create_producers_table():
-    brandshow_url = "https://www.che168.com/chengdu/list/#pvareaid=105370"
-    driver = create_driver()
-    driver.get(brandshow_url)
-    soup = get_htmlsoup(driver)
-    kill_driver(driver)
-
-    # словарь ПРОИЗВОДИТЕЛЬ - ССЫЛКА НА СТРАНИЦУ С МОДЕЛЯМИ ДАННОГО ПРОИЗВОДИТЕЛЯ
-    producers_url = {}
-    # словарь ПРОИЗВОДИТЕЛЬ - [модель производителя1, модель производителя2, ...]
-    producer_models_data = {}
-
-    # ссылки на страницу с моделями каждого производителя
-    brands_block = soup.find('div', {'id': 'brandshow'})
-    for dd_elem in brands_block.find_all('dd'):
-        for a_elem in dd_elem.find_all('a'):
-            print(a_elem)
-            producers_url[translate_text(a_elem.get_text(), 'en')] = HOST + a_elem.get('href')
-
-    cringe_producers = []
-    for producer in producers_url:
-        try:
-            current_prod_models_li = []
-            url = producers_url[producer]
-
-            driver = create_driver()
-            driver.get(url)
-            soup = get_htmlsoup(driver)
-            kill_driver(driver)
-
-            models_block = soup.find('div', {'id': 'seriesShow'})
-            for dd_elem in models_block.find_all('dd'):
-                for a_elem in dd_elem.find_all('a'):
-                    print(a_elem)
-                    current_prod_models_li.append(translate_text(a_elem.get_text(), 'en').replace(" -", "-"))
-
-            producer_models_data[producer] = current_prod_models_li
-        except Exception as _ex:
-            print(_ex)
-            cringe_producers.append(producer)
-        finally:
-            print(producer_models_data)
-
-    print(producer_models_data, cringe_producers)
-
-    for producer in producer_models_data:
-        for model in producer_models_data[producer]:
-            execute_querry(f"INSERT INTO vehicles_models (producer, model) VALUES ('{producer}', '{model}')")
-

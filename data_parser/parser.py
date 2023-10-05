@@ -4,6 +4,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.action_chains import ActionChains
 from bs4 import BeautifulSoup
 from googletrans import Translator
 from pycbrf import ExchangeRates
@@ -78,6 +79,8 @@ def get_data(driver, url):
 
         # НАИМЕНОВАНИЕ ТОВАРА
         name = translate_text(soup.find('h3', class_='car-brand-name').get_text(), 'en')
+        print(f'\n\n[GET DATA] Current product - {name}, ({url}).')
+        logs.log_info(f'[GET DATA] Current product {name}, ({url}).')
 
         # ЦЕНА
         price_ch = soup.find('span', class_='price').get_text()
@@ -99,11 +102,23 @@ def get_data(driver, url):
 
         price_ch = float(parsed_price) * ch_last_symbol_index
         price_ru = float(parsed_price) * ch_last_symbol_index * get_cny_rate()
+
         # округление и форматирование цены в РУБ
         price_ru = math.ceil(price_ru / 10000) * 10000
 
-        # МОДЕЛЬ И МАРКА
-        # model_make_block = soup.find("div", class_="bread-crumbs content")
+        #  ПРОИЗВОДИТЕЛЬ И МОДЕЛЬ
+        brand_block = soup.find("div", class_="bread-crumbs content")
+        brands_info_li = brand_block.find_all('a')
+
+        producer = translate_text(brands_info_li[-3].get_text(), 'en').replace('Second -hand ', '')\
+            .replace('Second -hand', '')
+        model = translate_text(brands_info_li[-2].get_text(), 'en').replace('Second -hand ', '')\
+            .replace('Second -hand', '')
+
+        if not producer:
+            print('[GET DATA] ERROR! Could\'t get producer.')
+            logs.log_warning('[GET DATA] ERROR! Could\'t get producer.')
+            return None
 
         # ИЗОБРАЖЕНИЯ
         raw_img_block = soup.find('div', class_='car-pic-list js-box-text')
@@ -140,7 +155,6 @@ def get_data(driver, url):
             return None
 
         dealer_data = [dealer_name, dealer_url]
-        print(f'DealerData {dealer_data}')
 
         # КАТЕГОРИИ И ОПЦИИ
         # часть информации из карточки товара
@@ -185,6 +199,8 @@ def get_data(driver, url):
             # получение идентификатора текущей вкладки
             current_tab = driver.current_window_handle
             button_moreconfig = driver.find_element(By.ID, "a_moreconfig")
+            actions = ActionChains(driver)
+            actions.move_to_element(button_moreconfig).perform()
             button_moreconfig.click()
             # переключение на новую вкладку
             for tab in driver.window_handles:
@@ -230,8 +246,11 @@ def get_data(driver, url):
             print('[GET DATA] Collecting options without redirect to moreconfig page.')
             logs.log_info('[GET DATA] Collecting options without redirect to moreconfig page.')
 
+
+
         # ИТОГОВЫЙ СЛОВАРЬ С ДАННЫМИ ПОЗИЦИИ
-        product_data = {'Name': name, 'PriceRU': price_ru, 'PriceCH': price_ch, 'URL': url,
+        product_data = {'Name': name, 'Producer': producer, 'TMP_model': model, 'PriceRU': price_ru,
+                        'PriceCH': price_ch, 'URL': url,
                         'CoverIMG': img_li[0], 'ImgLi': img_li, 'Descriptions': descriptions_list,
                         'DealerData': dealer_data, 'Options': options_dict}
         logs.log_info(f'[GET DATA] Product data has been successfully obtained {product_data}'.encode('utf-8'))
@@ -304,3 +323,4 @@ def get_target_urls():
                 print(f'[GET TARGET URLS INFO] An error occured while trying to get target urls {_ex}')
                 logs.log_warning(f'[GET TARGET URLS INFO] An error occured while trying to get target urls {_ex}')
         kill_driver(driver)
+
