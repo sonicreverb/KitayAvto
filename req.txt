@@ -3,4 +3,6 @@ webdriver_manager
 beautifulsoup4
 googletrans==4.0.0-rc1
 psycopg2-binary
-pandas
+pycbrf
+word2number
+openpyxl
