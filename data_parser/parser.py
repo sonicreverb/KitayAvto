@@ -1,3 +1,6 @@
+import time
+
+import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -70,12 +73,46 @@ def get_cny_rate():
         raise SystemExit(-1)
 
 
+# прокрутка страницы вниз для корректной прогрузки контента (в частности изображений)
+def scroll_to_bottom(driver):
+
+    old_position = 0
+    new_position = None
+
+    while new_position != old_position:
+        # Get old scroll position
+        old_position = driver.execute_script(
+                ("return (window.pageYOffset !== undefined) ?"
+                 " window.pageYOffset : (document.documentElement ||"
+                 " document.body.parentNode || document.body);"))
+        # Sleep and Scroll
+        time.sleep(1)
+        driver.execute_script((
+                "var scrollingElement = (document.scrollingElement ||"
+                " document.body);scrollingElement.scrollTop ="
+                " scrollingElement.scrollHeight;"))
+        # Get new position
+        new_position = driver.execute_script(
+                ("return (window.pageYOffset !== undefined) ?"
+                 " window.pageYOffset : (document.documentElement ||"
+                 " document.body.parentNode || document.body);"))
+
+
 # возвращает словарь product_data с данными о товаре указанной страницы
 def get_data(driver, url):
     try:
         soup = get_htmlsoup(driver)
         if not soup:
             return None
+
+        # прокрутка в самый низ страницы для загрузки изображений
+        actions = ActionChains(driver)
+        img_scroll_contentbox = driver.find_element(By.XPATH, '//*[@id="pic_li"]')
+        actions.move_to_element(img_scroll_contentbox).perform()
+        print('MOVED BY ACTIONS')
+        time.sleep(1)
+        driver.execute_script("window.scrollBy(0, 1500);")
+        print('SCROLL BY SCRIPT')
 
         # НАИМЕНОВАНИЕ ТОВАРА
         name = translate_text(soup.find('h3', class_='car-brand-name').get_text(), 'en')
@@ -119,13 +156,6 @@ def get_data(driver, url):
             print('[GET DATA] ERROR! Could\'t get producer.')
             logs.log_warning('[GET DATA] ERROR! Could\'t get producer.')
             return None
-
-        # ИЗОБРАЖЕНИЯ
-        raw_img_block = soup.find('div', class_='car-pic-list js-box-text')
-        raw_img_li = raw_img_block.find_all('img')
-        img_li = []
-        for img in raw_img_li:
-            img_li.append('https:' + img.get('src'))
 
         # ОПИСАНИЕ
         description_block = soup.find('p', class_='message-box over-hide')
@@ -192,14 +222,20 @@ def get_data(driver, url):
         # если на странице товара есть кнопка "Больше опций"
         try:
             soup = get_htmlsoup(driver)
-            if soup.find("i", class_="usedfont used-guanbi pricedownclose"):
-                close_trashtab_button = driver.find_element(By.XPATH,
-                                                            '/html/body/div[26]/div/div[2]/a[2]')
-                close_trashtab_button.click()
+
+            try:
+                if soup.find("i", class_="usedfont used-guanbi pricedownclose"):
+                    close_trashtab_button = driver.find_element(By.XPATH,
+                                                                '/html/body/div[26]/div/div[2]/a[2]')
+                    close_trashtab_button.click()
+
+            except selenium.common.exceptions.ElementNotInteractableException as _ex:
+                pass
+            except Exception as _ex:
+                print(_ex)
             # получение идентификатора текущей вкладки
             current_tab = driver.current_window_handle
             button_moreconfig = driver.find_element(By.ID, "a_moreconfig")
-            actions = ActionChains(driver)
             actions.move_to_element(button_moreconfig).perform()
             button_moreconfig.click()
             # переключение на новую вкладку
@@ -246,7 +282,21 @@ def get_data(driver, url):
             print('[GET DATA] Collecting options without redirect to moreconfig page.')
             logs.log_info('[GET DATA] Collecting options without redirect to moreconfig page.')
 
+        finally:
+            if len(driver.window_handles) >= 2:
+                current_tab = driver.current_window_handle
+                driver.execute_script('window.close();')
+                for tab in driver.window_handles:
+                    if tab != current_tab:
+                        driver.switch_to.window(tab)
 
+        # ИЗОБРАЖЕНИЯ
+        soup = get_htmlsoup(driver)
+        raw_img_block = soup.find('div', class_='car-pic-list js-box-text')
+        raw_img_li = raw_img_block.find_all('img')
+        img_li = []
+        for img in raw_img_li:
+            img_li.append('https:' + img.get('src'))
 
         # ИТОГОВЫЙ СЛОВАРЬ С ДАННЫМИ ПОЗИЦИИ
         product_data = {'Name': name, 'Producer': producer, 'TMP_model': model, 'PriceRU': price_ru,

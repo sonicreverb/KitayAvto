@@ -17,15 +17,13 @@ if __name__ == '__main__':
 
     for url in test_url:
         driver.execute_script('window.location.href = arguments[0];', url)
-        # driver.refresh()
-        # driver.execute_script("window.scrollBy(0, 15000);")
-        # driver.execute_script("window.scrollBy(0, -15000);")
 
         with open('test_page_source.html', 'w', encoding='utf-8') as o:
             o.write(driver.page_source)
         data = parser.get_data(driver, url)
         if data:
             write_productdata_to_db(data)
+            print(f'[MAIN] Data was get successfully!\n{data}')
     end = datetime.datetime.now()
     parser.kill_driver(driver)
 
