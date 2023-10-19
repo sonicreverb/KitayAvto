@@ -1,0 +1,1 @@
+from database.postgres_connector import execute_querry
