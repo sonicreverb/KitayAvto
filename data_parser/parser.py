@@ -1,4 +1,5 @@
 import time
+import requests
 
 import selenium.common.exceptions
 from selenium import webdriver
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 from googletrans import Translator
 from pycbrf import ExchangeRates
 from word2number import w2n
+from multiprocessing import current_process
 
 import os
 import logs
@@ -73,33 +75,9 @@ def get_cny_rate():
         raise SystemExit(-1)
 
 
-# прокрутка страницы вниз для корректной прогрузки контента (в частности изображений)
-def scroll_to_bottom(driver):
-
-    old_position = 0
-    new_position = None
-
-    while new_position != old_position:
-        # Get old scroll position
-        old_position = driver.execute_script(
-                ("return (window.pageYOffset !== undefined) ?"
-                 " window.pageYOffset : (document.documentElement ||"
-                 " document.body.parentNode || document.body);"))
-        # Sleep and Scroll
-        time.sleep(1)
-        driver.execute_script((
-                "var scrollingElement = (document.scrollingElement ||"
-                " document.body);scrollingElement.scrollTop ="
-                " scrollingElement.scrollHeight;"))
-        # Get new position
-        new_position = driver.execute_script(
-                ("return (window.pageYOffset !== undefined) ?"
-                 " window.pageYOffset : (document.documentElement ||"
-                 " document.body.parentNode || document.body);"))
-
-
 # возвращает словарь product_data с данными о товаре указанной страницы
 def get_data(driver, url):
+    current_process_name = current_process().name
     try:
         soup = get_htmlsoup(driver)
         if not soup:
@@ -109,21 +87,19 @@ def get_data(driver, url):
         actions = ActionChains(driver)
         img_scroll_contentbox = driver.find_element(By.XPATH, '//*[@id="pic_li"]')
         actions.move_to_element(img_scroll_contentbox).perform()
-        print('MOVED BY ACTIONS')
         time.sleep(1)
         driver.execute_script("window.scrollBy(0, 1500);")
-        print('SCROLL BY SCRIPT')
 
         # НАИМЕНОВАНИЕ ТОВАРА
         name = translate_text(soup.find('h3', class_='car-brand-name').get_text(), 'en')
-        print(f'\n\n[GET DATA] Current product - {name}, ({url}).')
-        logs.log_info(f'[GET DATA] Current product {name}, ({url}).')
+        print(f'\n\n[GET DATA] ({current_process_name}) Current product - {name}, ({url}).')
+        logs.log_info(f'[GET DATA] ({current_process_name}) Current product {name}, ({url}).')
 
         # ЦЕНА
         price_ch = soup.find('span', class_='price').get_text()
         if not price_ch:
-            print(f"[GET DATA] Couldn't get product price ({url}).")
-            logs.log_warning(f"[GET DATA] Couldn't get product price ({url}).")
+            print(f"[GET DATA] ({current_process_name}) Couldn't get product price ({url}).")
+            logs.log_warning(f"[GET DATA] ({current_process_name}) Couldn't get product price ({url}).")
             return None
         # форматирование цены
         parsed_price = price_ch.replace(',', '').replace('\n', '').split('：')[0]
@@ -153,16 +129,16 @@ def get_data(driver, url):
             .replace('Second -hand', '')
 
         if not producer:
-            print('[GET DATA] ERROR! Could\'t get producer.')
-            logs.log_warning('[GET DATA] ERROR! Could\'t get producer.')
+            print(f'[GET DATA] ({current_process_name}) ERROR! Could\'t get producer.')
+            logs.log_warning(f'[GET DATA] ({current_process_name}) ERROR! Could\'t get producer.')
             return None
 
         # ОПИСАНИЕ
         description_block = soup.find('p', class_='message-box over-hide')
         # если описание не было найдено
         if not description_block:
-            print("[GET DATA] Couldn't find description block.")
-            logs.log_warning("[GET DATA] Couldn't find description block.")
+            print(f"[GET DATA] ({current_process_name}) Couldn't find description block.")
+            logs.log_warning(f"[GET DATA] ({current_process_name}) Couldn't find description block.")
             return None
         description_CH = description_block.get_text()
         description_RU = translate_text(description_CH, 'ru')
@@ -173,15 +149,15 @@ def get_data(driver, url):
         # ДАННЫЕ О ДИЛЕРЕ
         dealer_block = soup.find('a', class_='company-left-link')
         if not dealer_block:
-            print("[GET DATA] Couldn't find dealer data block.")
-            logs.log_warning("[GET DATA] Couldn't find dealer data block.")
+            print(f"[GET DATA] ({current_process_name}) Couldn't find dealer data block.")
+            logs.log_warning(f"[GET DATA] ({current_process_name}) Couldn't find dealer data block.")
             return None
         dealer_url = "https://dealers.che168.com/shop" + dealer_block.get('href')
         if dealer_block.find('span', class_='manger-name'):
             dealer_name = (translate_text(dealer_block.find('span', class_='manger-name').get_text(), 'en'))
         else:
-            print("[GET DATA] Couldn't find dealer name.")
-            logs.log_warning("[GET DATA] Couldn't find dealer name.")
+            print(f"[GET DATA] ({current_process_name}) Couldn't find dealer name.")
+            logs.log_warning(f"[GET DATA] ({current_process_name}) Couldn't find dealer name.")
             return None
 
         dealer_data = [dealer_name, dealer_url]
@@ -242,11 +218,9 @@ def get_data(driver, url):
             for tab in driver.window_handles:
                 if tab != current_tab:
                     driver.switch_to.window(tab)
-            # new_tab_page_source = driver.page_source
-            # with open('test_page_source.html', 'w', encoding='utf-8') as o:
-            #     o.write(new_tab_page_source)
-            print('[GET DATA] Redirect to moreconfig page.')
-            logs.log_info('[GET DATA] Redirect to moreconfig page.')
+
+            print(f'[GET DATA] ({current_process_name}) Redirect to moreconfig page.')
+            logs.log_info(f'[GET DATA] ({current_process_name}) Redirect to moreconfig page.')
 
             # работа с таблицей опций
             soup = get_htmlsoup(driver)
@@ -279,8 +253,9 @@ def get_data(driver, url):
 
         except NoSuchElementException as _ex:
             # если кнопки нет выдёргиваются базовые опции
-            print('[GET DATA] Collecting options without redirect to moreconfig page.')
-            logs.log_info('[GET DATA] Collecting options without redirect to moreconfig page.')
+            print(f'[GET DATA] ({current_process_name}) Collecting options without redirect to moreconfig page.')
+            logs.log_info(f'[GET DATA] ({current_process_name}) Collecting options without redirect to moreconfig page.'
+                          )
 
         finally:
             if len(driver.window_handles) >= 2:
@@ -308,21 +283,23 @@ def get_data(driver, url):
         return product_data
 
     except Exception as _ex:
-        print(f"[GET DATA INFO] An error occured while trying to get data - {_ex}. ")
-        logs.log_warning(f"[GET DATA INFO] An error occured while trying to get data - {_ex}. ")
+        print(f"[GET DATA INFO] ({current_process_name}) An error occured while trying to get data - {_ex}. ")
+        logs.log_warning(f"[GET DATA INFO] ({current_process_name}) An error occured while trying to get data - {_ex}.")
         return None
 
 
 # получает на вход driver с page_source страницы, с которой необходимо выудить все ссылки на товары и записывает
 # ссылки в файл
-def get_product_links_from_page(driver):
+def get_product_links_from_page(driver, products_urls_file: str):
     soup = get_htmlsoup(driver)
+    current_process_name = current_process().name
+
     if not soup:
         return None
 
     raw_soup_li = soup.find_all('a', class_='carinfo')
     if raw_soup_li:
-        with open(os.path.join(BASE_DIR, "data_parser", "links", 'product_urls_to_parse.txt'), "a") as out:
+        with open(os.path.join(BASE_DIR, "data_parser", "links", products_urls_file), "a") as out:
             for idx in range(len(raw_soup_li) - 1):  # -1 т.к. последняя ссылка в массиве - мусор
                 link = raw_soup_li[idx].get('href')
                 # похоже, что на сайте существует два типа ссылок авто с хостом и без, обработка обоих случаев
@@ -332,8 +309,8 @@ def get_product_links_from_page(driver):
                     link = HOST + link
                 out.write(link + '\n')
 
-        print(f'[GET PRODUCT LINKS INFO] There was found {len(raw_soup_li)} links.')
-        logs.log_info(f'[GET PRODUCT LINKS INFO] There was found {len(raw_soup_li)} links.')
+        print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) There was found {len(raw_soup_li)} links.')
+        logs.log_info(f'[GET PRODUCT LINKS INFO] ({current_process_name}) There was found {len(raw_soup_li)} links.')
 
     # переход на следующую страницу
     try:
@@ -341,36 +318,53 @@ def get_product_links_from_page(driver):
         if new_url:
             new_url = new_url.get('href')
             driver.execute_script('window.location.href = arguments[0];', HOST + new_url)
-            print(f'[GET PRODUCT LINKS INFO] Transition to new page {HOST + new_url}')
-            logs.log_info(f'[GET PRODUCT LINKS INFO] Transition to new page {HOST + new_url}')
-            get_product_links_from_page(driver)
+            print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
+            logs.log_info(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
+            time.sleep(2)
+            get_product_links_from_page(driver, products_urls_file)
         else:
-            print('[GET PRODUCT LINKS INFO] No links were found.')
-            logs.log_warning('[GET PRODUCT LINKS INFO] No links were found.')
+            print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
+            logs.log_warning(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
             return None
     except Exception as _ex:
-        print(f'[GET PRODUCT LINKS INFO] An error occured while trying to get next page - {_ex}.')
-        logs.log_warning(f'[GET PRODUCT LINKS INFO] An error occured while trying to get next page - {_ex}.')
+        print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) An error occured while trying to get next page'
+              f' - {_ex}.')
+        logs.log_warning(f'[GET PRODUCT LINKS INFO] ({current_process_name})'
+                         f' An error occured while trying to get next page - {_ex}.')
 
 
 # запись всех активных ссылок для парсинга в файл
-def get_target_urls():
+def get_target_urls(categories_urls_file: str, products_urls_file: str):
     # очистка содержимого product_urls_to_parse.txt
-    with open(os.path.join(BASE_DIR, "data_parser", "links", 'product_urls_to_parse.txt'), "w"):
+    with open(os.path.join(BASE_DIR, "data_parser", "links", products_urls_file), "w"):
         pass
 
     # создаём и открываем окно браузера
     driver = create_driver()
     driver.get(HOST)
-    with open(os.path.join(BASE_DIR, 'data_parser', 'links', 'categories_urls_to_parse.txt')) as ca_input:
+    current_process_name = current_process().name
+    with open(os.path.join(BASE_DIR, 'data_parser', 'links', categories_urls_file)) as ca_input:
         for category_link in ca_input:
             try:
-                print(f"[GET TARGET URLS INFO] Current parsed url - {category_link}", end="")
-                logs.log_info(f"[GET TARGET URLS INFO] Current parsed url - {category_link}")
+                print(f"[GET TARGET URLS INFO] ({current_process_name}) Current parsing category url"
+                      f" - {category_link}", end="")
+                logs.log_info(f"[GET TARGET URLS INFO] ({current_process_name}) Current parsing category url"
+                              f" - {category_link}")
                 driver.execute_script('window.location.href = arguments[0];', category_link)
-                get_product_links_from_page(driver)
+                get_product_links_from_page(driver, products_urls_file)
             except Exception as _ex:
-                print(f'[GET TARGET URLS INFO] An error occured while trying to get target urls {_ex}')
-                logs.log_warning(f'[GET TARGET URLS INFO] An error occured while trying to get target urls {_ex}')
+                print(f'[GET TARGET URLS INFO] ({current_process_name}) '
+                      f'An error occured while trying to get target urls {_ex}')
+                logs.log_warning(f'[GET TARGET URLS INFO] ({current_process_name}) '
+                                 f'An error occured while trying to get target urls {_ex}')
         kill_driver(driver)
 
+
+# проверка валидности товара по факту переадрессации
+def validate_product_activity(url):
+    response = requests.get(url)
+    # если в конечном адрессе присутствует данная строка, то элемент неактивен
+    isRedirectedToErrorPage = 'https://www.che168.com/CarDetail/wrong.aspx' in response.url
+    logs.log_info(f"[VALIDATE PRODUCT ACTIVITY] Activity: {not isRedirectedToErrorPage}; URL: {url}; "
+                  f"RESPONSE URL: {response.url};")
+    return not isRedirectedToErrorPage

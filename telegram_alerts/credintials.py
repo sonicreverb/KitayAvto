@@ -1,0 +1,2 @@
+token = '6595233202:AAGf6xue9Epnf9TyNJCvNwVdohKpzFh8Gpg'
+users = [22738294, 443667299]

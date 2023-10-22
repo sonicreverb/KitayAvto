@@ -1,1 +1,1 @@
-from database.postgres_connector import execute_querry
+from database.postgres_connector import execute_querry, write_productdata_to_db
