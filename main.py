@@ -39,18 +39,21 @@ def parsing_process(categories_urls_file, products_urls_file):
         successful_prods_count = 0
 
         for url in urls_to_parse:
-            print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
-                  f'Proseccing product with URL: {url}')
-            driver.execute_script('window.location.href = arguments[0];', url)
-            data = parser.get_data(driver, url)
-
-            if data:
-                successful_prods_count += 1
-                db.write_productdata_to_db(data)
+            try:
                 print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
-                      f'Data was obtained successfully!\n{data}')
-            else:
-                total_products_num -= 1
+                      f'Proseccing product with URL: {url}')
+                driver.execute_script('window.location.href = arguments[0];', url)
+                data = parser.get_data(driver, url)
+
+                if data:
+                    successful_prods_count += 1
+                    db.write_productdata_to_db(data)
+                    print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
+                          f'Data was obtained successfully!\n{data}')
+                else:
+                    total_products_num -= 1
+            except Exception as _ex:
+                print(_ex)
     except Exception as _ex:
         print(_ex)
     finally:

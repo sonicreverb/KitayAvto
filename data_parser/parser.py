@@ -221,6 +221,7 @@ def get_data(driver, url):
 
             print(f'[GET DATA] ({current_process_name}) Redirect to moreconfig page.')
             logs.log_info(f'[GET DATA] ({current_process_name}) Redirect to moreconfig page.')
+            time.sleep(1)
 
             # работа с таблицей опций
             soup = get_htmlsoup(driver)
@@ -320,7 +321,7 @@ def get_product_links_from_page(driver, products_urls_file: str):
             driver.execute_script('window.location.href = arguments[0];', HOST + new_url)
             print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
             logs.log_info(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
-            time.sleep(2)
+            time.sleep(3)
             get_product_links_from_page(driver, products_urls_file)
         else:
             print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
