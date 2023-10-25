@@ -1,10 +1,13 @@
+import datetime
 import threading
 import multiprocessing
 import data_parser.parser as parser
 import database as db
 import logs
-# import telegram_alerts
 import os.path
+import database.tables_managament as tables
+
+from telegram_alerts import send_notification
 
 
 # валидация активностей товаров из БД
@@ -28,7 +31,7 @@ def activity_validation():
 def parsing_process(categories_urls_file, products_urls_file):
     parser.get_target_urls(categories_urls_file, products_urls_file)
     driver = parser.create_driver(images_enabled=True)
-    driver.get(parser.HOST)
+    driver.get('https://duckduckgo.com')
 
     try:
         with open(os.path.join(parser.BASE_DIR, 'data_parser', 'links', products_urls_file)) as r:
@@ -52,10 +55,18 @@ def parsing_process(categories_urls_file, products_urls_file):
                           f'Data was obtained successfully!\n{data}')
                 else:
                     total_products_num -= 1
-            except Exception as _ex:
-                print(_ex)
-    except Exception as _ex:
-        print(_ex)
+            except Exception as ex:
+                print(ex)
+                # если ошибочно закрылись все окна браузера или сам браузер был аварийно закрыт, начинаем новую сессию
+                if len(driver.window_handles) == 0 or driver is None or driver.service.process is None:
+                    print('[PARSING RPOCESS] Recreating driver.')
+                    logs.log_info('[PARSING RPOCESS] Recreating driver.')
+                    driver = parser.create_driver(images_enabled=True)
+                    driver.get('https://duckduckgo.com')
+    except Exception as ex:
+        print(ex)
+        logs.log_warning(ex)
+        send_notification(f'[KITAY AVTO] Критическая ошибка! ({ex}).')
     finally:
         parser.kill_driver(driver)
 
@@ -65,7 +76,6 @@ if __name__ == '__main__':
 
     # поток для валидации активности
     activValThread = threading.Thread(target=activity_validation, name='ActivityValidationThread')
-    activValThread.start()
 
     parserProcess1 = multiprocessing.Process(target=parsing_process,
                                              args=('categories_urls_to_parse_1.txt', 'product_urls_to_parse_1.txt'),
@@ -74,15 +84,31 @@ if __name__ == '__main__':
     parserProcess2 = multiprocessing.Process(target=parsing_process,
                                              args=('categories_urls_to_parse_2.txt', 'product_urls_to_parse_2.txt'),
                                              name='parserProccess2')
+    try:
+        begin_session_time = datetime.datetime.now()
+        activValThread.start()
 
-    parserProcess1.start()
-    parserProcess2.start()
+        parserProcess1.start()
+        parserProcess2.start()
 
-    activValThread.join()
-    print('Обновление активности завершено.')
-    logs.log_warning('Обновление активности завершено.')
+        activValThread.join()
+        print('Обновление активности завершено.')
+        logs.log_warning('Обновление активности завершено.')
+        send_notification(f'[KITAY AVTO] Обновление активности завершено ({datetime.datetime.now()})')
 
-    parserProcess1.join()
-    parserProcess2.join()
-    print('Парсинг завершён.')
-    logs.log_info('Парсинг завершён.')
+        parserProcess1.join()
+        parserProcess2.join()
+        print('Парсинг завершён.')
+        logs.log_info('Парсинг завершён.')
+
+        send_notification(f'[KITAY AVTO] Парсинг завершён! ({datetime.datetime.now()})')
+
+        tables.write_data_to_xlsx('SELECT * FROM vehicles_data;', 'KitayAvto_output.xlsx')
+        tables.upload_file_to_ftp('KitayAvto_output.xlsx')
+        end_session_time = datetime.datetime.now()
+
+        send_notification(f'[KITAY AVTO] Данные успешно отправлены на FTP! {datetime.datetime.now()}')
+        send_notification(f'[KITAY AVTO] Сессия завершена за {(end_session_time - begin_session_time).seconds / 3600}'
+                          f' ч.')
+    except Exception as _ex:
+        print(_ex)

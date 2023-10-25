@@ -123,9 +123,9 @@ def get_data(driver, url):
         brand_block = soup.find("div", class_="bread-crumbs content")
         brands_info_li = brand_block.find_all('a')
 
-        producer = translate_text(brands_info_li[-3].get_text(), 'en').replace('Second -hand ', '')\
+        producer = translate_text(brands_info_li[-3].get_text(), 'en').replace('Second -hand ', '') \
             .replace('Second -hand', '')
-        model = translate_text(brands_info_li[-2].get_text(), 'en').replace('Second -hand ', '')\
+        model = translate_text(brands_info_li[-2].get_text(), 'en').replace('Second -hand ', '') \
             .replace('Second -hand', '')
 
         if not producer:
@@ -246,7 +246,7 @@ def get_data(driver, url):
             # print(translate_text(parsed_categories_string_CH, 'en'), translate_text(parsed_values_string_CH, 'en'))
             parsed_values_string_CH = parsed_values_string_CH
             parsed_categories_li = translate_text(parsed_categories_string_CH, 'ru').split(separator)
-            parsed_values_li = translate_text(parsed_values_string_CH, 'ru').replace('●', 'Есть ').replace('○', 'Нет ')\
+            parsed_values_li = translate_text(parsed_values_string_CH, 'ru').replace('●', 'Есть ').replace('○', 'Нет ') \
                 .replace('-', 'Нет ').replace('Никто', 'Нет ').split(separator)
 
             for elem_id in range(len(parsed_categories_li)):
@@ -324,9 +324,32 @@ def get_product_links_from_page(driver, products_urls_file: str):
             time.sleep(3)
             get_product_links_from_page(driver, products_urls_file)
         else:
-            print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
-            logs.log_warning(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
-            return None
+            print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Retryning to get links again '
+                  f'from page ({driver.current_url}).')
+            logs.log_warning(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Retryning to get links again '
+                             f'from page ({driver.current_url}).')
+
+            # вторая попытка получить ссылки на автомобили со страницы
+            old_url = driver.current_url
+            driver.quit()
+            driver = create_driver()
+            driver.get(old_url)
+            soup = get_htmlsoup(driver)
+            new_url = soup.find('a', class_='page-item-next')
+
+            if new_url:
+                new_url = new_url.get('href')
+                driver.execute_script('window.location.href = arguments[0];', HOST + new_url)
+                print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
+                logs.log_info(
+                    f'[GET PRODUCT LINKS INFO] ({current_process_name}) Transition to new page {HOST + new_url}')
+                time.sleep(3)
+                get_product_links_from_page(driver, products_urls_file)
+            else:
+                print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
+                logs.log_warning(f'[GET PRODUCT LINKS INFO] ({current_process_name}) No links were found.')
+                return None
+
     except Exception as _ex:
         print(f'[GET PRODUCT LINKS INFO] ({current_process_name}) An error occured while trying to get next page'
               f' - {_ex}.')
@@ -358,6 +381,12 @@ def get_target_urls(categories_urls_file: str, products_urls_file: str):
                       f'An error occured while trying to get target urls {_ex}')
                 logs.log_warning(f'[GET TARGET URLS INFO] ({current_process_name}) '
                                  f'An error occured while trying to get target urls {_ex}')
+                # если ошибочно закрылись все окна браузера или сам браузер был аварийно закрыт, начинаем новую сессию
+                if len(driver.window_handles) == 0 or driver is None or driver.service.process is None:
+                    print('[PARSING RPOCESS] Recreating driver.')
+                    logs.log_info('[PARSING RPOCESS] Recreating driver.')
+                    driver = create_driver(images_enabled=True)
+                    driver.get('https://duckduckgo.com')
         kill_driver(driver)
 
 
