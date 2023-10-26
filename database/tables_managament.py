@@ -31,7 +31,7 @@ def write_data_to_xlsx(querry, filename):
             for column_index, column_name in enumerate(columns, start=1):
                 column_letter = get_column_letter(column_index)
                 worksheet[f"{column_letter}1"] = column_name
-                worksheet["BF1"] = 'CNY_rate'
+                worksheet["CI1"] = 'CNY_rate'
 
             # запись данных
             for row_index, row in enumerate(rows, start=2):
@@ -41,8 +41,8 @@ def write_data_to_xlsx(querry, filename):
                         worksheet[f"{column_letter}{row_index}"] = str(cell_value)
                     except Exception as _ex:
                         print('[XLSX FILE] could\'t write cell value, string error.', _ex)
-                        logs.log_warning('[XLSX FILE] could\'t write cell value, string error.', _ex)
-                    worksheet[f"BF{row_index}"] = str(cny_rate)
+                        logs.log_warning(f'[XLSX FILE] could\'t write cell value, string error. {_ex}')
+                    worksheet[f"CI{row_index}"] = str(cny_rate)
 
             # сохранение файла
             filename_path = os.path.join(BASE_DIR, 'database', 'output', filename)
