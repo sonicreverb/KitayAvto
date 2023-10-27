@@ -348,3 +348,8 @@ def write_productdata_to_db(product_data):
     else:
         print("[PostGreSQL INFO] Error, couldn't get connection...")
         logs.log_error("[PostGreSQL INFO] Error, couldn't get connection...")
+
+
+# удаление неактивных позиций из БД по истечению суток после отметки их неактивными
+def delete_unactive_positions():
+    execute_querry("DELETE FROM vehicles_data WHERE unactive_since <= NOW() - INTERVAL '1 day", data_returned=False)

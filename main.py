@@ -23,6 +23,9 @@ def activity_validation():
             logs.log_info(f'[ACTIVITY VALIDATION] ({threading.current_thread().name})'
                           f' Setting false activity to product with URL: {url}')
             db.execute_querry(f'UPDATE vehicles_data SET activity = false WHERE url = \'{url}\'', data_returned=False)
+            db.execute_querry('UPDATE vehicles_data SET unactive_since = NOW() WHERE activity = false AND'
+                              ' unactive_since is NULL')
+    db.postgres_connector.delete_unactive_positions()
     print(f'[ACTIVITY VALIDATION] ({threading.current_thread().name}) Activity validation complete.')
     logs.log_info(f'[ACTIVITY VALIDATION] ({threading.current_thread().name}) Activity validation complete.')
 

@@ -14,6 +14,7 @@ from googletrans import Translator
 from pycbrf import ExchangeRates
 from word2number import w2n
 from multiprocessing import current_process
+from database import execute_querry
 
 import os
 import logs
@@ -94,6 +95,12 @@ def get_data(driver, url):
         name = translate_text(soup.find('h3', class_='car-brand-name').get_text(), 'en')
         print(f'\n\n[GET DATA] ({current_process_name}) Current product - {name}, ({url}).')
         logs.log_info(f'[GET DATA] ({current_process_name}) Current product {name}, ({url}).')
+
+        # проверка на дубликат
+        if name in execute_querry('SELECT name FROM vehicles_data', True):
+            print('[GET DATA] Error. Vehicle with this name already exist in DB.')
+            logs.log_warning('[GET DATA] Error. Vehicle with this name already exist in DB.')
+            return None
 
         # ЦЕНА
         price_ch = soup.find('span', class_='price').get_text()
@@ -246,7 +253,7 @@ def get_data(driver, url):
             # print(translate_text(parsed_categories_string_CH, 'en'), translate_text(parsed_values_string_CH, 'en'))
             parsed_values_string_CH = parsed_values_string_CH
             parsed_categories_li = translate_text(parsed_categories_string_CH, 'ru').split(separator)
-            parsed_values_li = translate_text(parsed_values_string_CH, 'ru').replace('●', 'Есть ').replace('○', 'Нет ') \
+            parsed_values_li = translate_text(parsed_values_string_CH, 'ru').replace('●', 'Есть ').replace('○', 'Нет ')\
                 .replace('-', 'Нет ').replace('Никто', 'Нет ').split(separator)
 
             for elem_id in range(len(parsed_categories_li)):
@@ -272,6 +279,9 @@ def get_data(driver, url):
         raw_img_li = raw_img_block.find_all('img')
         img_li = []
         for img in raw_img_li:
+            if img == 'x.autoimg.cn/2scimg/m/20221226/default-che168.png':
+                print("[GET DATA] Images wasn't load correctly...")
+                logs.log_warning(f"[GET DATA] Images wasn't load correctly... ({current_process_name}), {url}")
             img_li.append('https:' + img.get('src'))
 
         # ИТОГОВЫЙ СЛОВАРЬ С ДАННЫМИ ПОЗИЦИИ
