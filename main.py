@@ -37,8 +37,18 @@ def parsing_process(categories_urls_file, products_urls_file):
     driver.get('https://duckduckgo.com')
 
     try:
+        # активные ссылки, которые находятся на сайте 168che
         with open(os.path.join(parser.BASE_DIR, 'data_parser', 'links', products_urls_file)) as r:
-            urls_to_parse = r.read().split()
+            active_links = r.read().split()
+
+        # невалидные ссылки
+        with open(os.path.join(parser.BASE_DIR, 'data_parser', 'links', 'invalid_links.txt')) as r:
+            invalid_links = r.read().split()
+
+        # локальные ссылки из БД
+        local_links = db.execute_querry('SELECT url FROM vehicles_data;', True)
+
+        urls_to_parse = (set(active_links) - set(local_links)) - set(invalid_links)
 
         current_process_name = multiprocessing.current_process().name
         total_products_num = len(urls_to_parse)
@@ -57,6 +67,10 @@ def parsing_process(categories_urls_file, products_urls_file):
                     print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
                           f'Data was obtained successfully!\n{data}')
                 else:
+                    invalid_links_file = open(os.path.join(parser.BASE_DIR, 'data_parser', 'links',
+                                                           'invalid_links.txt'), 'a+', encoding='utf-8')
+                    invalid_links_file.write(url + "\n")
+                    invalid_links_file.close()
                     total_products_num -= 1
             except Exception as ex:
                 print(ex)
