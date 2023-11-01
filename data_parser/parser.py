@@ -123,9 +123,6 @@ def get_data(driver, url):
         price_ch = float(parsed_price) * ch_last_symbol_index
         price_ru = float(parsed_price) * ch_last_symbol_index * get_cny_rate()
 
-        # округление и форматирование цены в РУБ
-        price_ru = math.ceil(price_ru / 10000) * 10000
-
         #  ПРОИЗВОДИТЕЛЬ И МОДЕЛЬ
         brand_block = soup.find("div", class_="bread-crumbs content")
         brands_info_li = brand_block.find_all('a')
@@ -340,11 +337,8 @@ def get_product_links_from_page(driver, products_urls_file: str):
                              f'from page ({driver.current_url}).')
 
             # вторая попытка получить ссылки на автомобили со страницы
-            old_url = driver.current_url
-            driver.quit()
-            driver = create_driver()
-            driver.get(old_url)
-            soup = get_htmlsoup(driver)
+            time.sleep(5)
+            driver.refresh()
             new_url = soup.find('a', class_='page-item-next')
 
             if new_url:

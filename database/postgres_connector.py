@@ -1,7 +1,49 @@
 import psycopg2
 import logs
+import math
 
 from database.credentials import host, user, password, db_name
+from pycbrf import ExchangeRates
+
+
+# получение цены расстоможки согласно объёму из БД
+def get_custom_clearance_coeff(volume):
+    # получаем соединение
+    connection = get_connection_to_db()
+
+    # если соединение установлено успешно
+    if connection:
+        with connection.cursor() as cursor:
+            # проверка на существование таблицы
+            table_name = "tcalc"
+            cursor.execute("SELECT EXISTS(SELECT relname FROM pg_class WHERE relname=%s)", (table_name,))
+            table_exists = cursor.fetchone()[0]
+
+            if table_exists:
+                # получение цены расстоможки согласно объёму из БД
+
+                cursor.execute(
+                    f"SELECT sumrub FROM tcalc WHERE volume = {volume};"
+                )
+
+                coeff = float(cursor.fetchone()[0])
+
+                print("[PostGreSQL INFO] Data was read successfully.")
+
+            else:
+                print(f"[PostGreSQL INFO] Error while trying to read {table_name}. {table_name} doesn't exist.")
+                connection.close()
+                return None
+
+        connection.commit()
+        # прикрываем соединение
+        connection.close()
+        print("[PostGreSQL INFO] Connection closed.")
+
+        return coeff
+    else:
+        print("[PostGreSQL INFO] Error, couldn't get connection...")
+        return None
 
 
 # получение соединения с БД
@@ -102,6 +144,20 @@ def find_first_occurrence(string, array):
     return result
 
 
+# преобразовывает string представление объёма двигателя из категории в float
+def convert_volume_string_to_float(volume_string):
+    # Удаление символов, не являющихся цифрами или десятичными разделителями
+    cleaned_string = ''.join(c for c in volume_string if c.isdigit() or c == '.' or c == ',')
+
+    try:
+        # Преобразование строки в число типа float
+        volume_float = float(cleaned_string)
+        return volume_float
+    except ValueError:
+        # Если преобразование невозможно, вернуть None или выбрать другое действие по вашему усмотрению
+        return None
+
+
 # запись данных машины в БД
 def write_productdata_to_db(product_data):
     # получаем соединение
@@ -115,8 +171,35 @@ def write_productdata_to_db(product_data):
             # ОСНОВНАЯ ИНФОРМАЦИЯ
             name = product_data['Name']
             url = product_data['URL']
-            total_price = product_data['PriceRU']
+            price_ru = product_data['PriceRU']
             price_ch = product_data['PriceCH']
+
+            # РАСЧЁТНЫЕ ЦЕНЫ
+            # цена с комиссией (цена RU * 1,1)
+            comission_price = price_ru * 1.1
+            # цена с доставкой (цена с комиссией + 300.000 рублей)
+            delivery_price = comission_price + 300000
+
+            # получаем объём двигателя для рассчёта цены расстоможки
+            volume_str = product_data['Options'].get('Объём двигателя', [])
+            volume = convert_volume_string_to_float(volume_str)
+            if not volume:
+                print("[WRITE DATA TO DB] Couldn't get engine volume.")
+                logs.log_warning(f"[WRITE DATA TO DB] Couldn't get engine volume. ({url})")
+                connection.commit()
+                # прикрываем соединение
+                connection.close()
+                print("[PostGreSQL INFO] Connection closed.")
+                logs.log_info("[PostGreSQL INFO] Connection closed.")
+                return None
+            if volume <= 500:
+                volume *= 1000
+            custom_clearance_coeff = get_custom_clearance_coeff(volume)
+            print(volume, custom_clearance_coeff)
+
+            # цена с растоможкой (цена с доставкой + стоимость растоможки согласно объему двигателя + 50000р)
+            total_price = delivery_price + custom_clearance_coeff + 50000
+            total_price = math.ceil(total_price / 10000) * 10000
 
             # ПРОИЗВОДИТЕЛЬ И МОДЕЛЬ
             all_models_dict = read_models_from_db()
@@ -320,11 +403,12 @@ def write_productdata_to_db(product_data):
                     "category34, category35, category36, category37, category38, category39, category40, category41, " \
                     "category42, category43, category44, category45, category46, category47, category48, category49, " \
                     "category50, category51, category52, category53, category54, category55, category56, category57," \
-                    " category58, description_ch, description_ru, description_en, dealer_name, dealer_url, price_ch )" \
+                    " category58, description_ch, description_ru, description_en, dealer_name, dealer_url, price_ch, " \
+                    "price_ru )" \
                     " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s," \
                     "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, " \
                     "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, " \
-                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
             cursor.execute(query, (name, producer, model, url, total_price, img1, img2, img3,
                                    img4, img5, img6, img7, img8, img9, img10, img11, img12, img13, img14, img15,
@@ -337,7 +421,7 @@ def write_productdata_to_db(product_data):
                                    category43, category44, category45, category46, category47, category48, category49,
                                    category50, category51, category52, category53, category54, category55, category56,
                                    category57, category58, description_CH, description_RU, description_EN, dealer_name,
-                                   dealer_url, price_ch))
+                                   dealer_url, price_ch, price_ru))
             print("[PostGreSQL INFO] Data was wrote to DataBase.")
             logs.log_info(f"[PostGreSQL INFO] Data was wrote to DataBase. ({name, url})")
         connection.commit()
@@ -352,4 +436,109 @@ def write_productdata_to_db(product_data):
 
 # удаление неактивных позиций из БД по истечению суток после отметки их неактивными
 def delete_unactive_positions():
-    execute_querry("DELETE FROM vehicles_data WHERE unactive_since <= NOW() - INTERVAL '1 day", data_returned=False)
+    execute_querry("DELETE FROM vehicles_data WHERE unactive_since <= NOW() - INTERVAL '1 day'", data_returned=False)
+
+
+# возвращает текущий курс юань
+def get_cny_rate():
+    try:
+        rates = ExchangeRates()
+        cny_to_rub_rate = rates['CNY'].value
+        return float(cny_to_rub_rate)
+    except Exception as _ex:
+        logs.log_error(f"[GET CNY RATE] Error while trying to get current course {_ex}")
+        raise SystemExit(-1)
+
+
+# создание таблицы таможенного калькулятора
+def create_tcalc():
+    # получаем соединение
+    connection = get_connection_to_db()
+
+    # если соединение установлено успешно
+    if connection:
+        with connection.cursor() as cursor:
+            # проверка на существование таблицы
+            table_name = "tcalc"
+            cursor.execute("SELECT EXISTS(SELECT relname FROM pg_class WHERE relname=%s)", (table_name,))
+            table_exists = cursor.fetchone()[0]
+
+            if table_exists:
+                # если таблица существует - удаляем все данные перед записью
+                cursor.execute(f"DELETE FROM {table_name};")
+
+                # получаем текущий курс евро
+                cny_rate = get_cny_rate()
+
+                # запись в БД с кодировкой
+                for vol in range(500, 8200 + 1):
+                    if vol < 1000:
+                        rate = 1.5
+                    elif vol < 1501:
+                        rate = 1.7
+                    elif vol < 1801:
+                        rate = 2.5
+                    elif vol < 2301:
+                        rate = 2.7
+                    elif vol < 3001:
+                        rate = 3
+                    else:
+                        rate = 3.6
+
+                    # SQL запрос
+                    query = "INSERT INTO tcalc (volume, rate, sum, sumRUB) VALUES (%s, %s, %s, %s)"
+                    # print(query, (vol, rate, vol*rate, vol*rate*euro_rate + 17200))
+                    cursor.execute(query, (vol, rate, vol * rate, vol * rate * cny_rate + 17200))
+            else:
+                # иначе создаём новую таблицу
+                # cursor.execute(f"CREATE TABLE {table_name}(id serial PRIMARY KEY, producer varchar(255) NOT NULL,"
+                #                f"model varchar(255) NOT NULL, model_id int, url varchar(511));")
+                print("[PostGreSQL INFO] Error, table doesn't exist...")
+
+        connection.commit()
+        # прикрываем соединение
+        connection.close()
+        print("[PostGreSQL INFO] Connection closed.")
+    else:
+        print("[PostGreSQL INFO] Error, couldn't get connection...")
+
+
+# обновление таможенного калькулятора согласно текущему курсу
+def update_tcalc():
+    # получаем соединение
+    connection = get_connection_to_db()
+
+    # если соединение установлено успешно
+    if connection:
+        with connection.cursor() as cursor:
+            # получаем текущий курс евро
+            cny_rate = get_cny_rate()
+
+            for vol in range(500, 8200 + 1):
+                if vol < 1000:
+                    rate = 1.5
+                elif vol < 1501:
+                    rate = 1.7
+                elif vol < 1801:
+                    rate = 2.5
+                elif vol < 2301:
+                    rate = 2.7
+                elif vol < 3001:
+                    rate = 3
+                else:
+                    rate = 3.6
+
+                # SQL запрос
+                query = f"UPDATE tcalc SET sumrub = {vol * rate * cny_rate + 17200} WHERE volume = {vol};"
+                # print(query, (vol, rate, vol*rate, vol*rate*euro_rate + 17200))
+                cursor.execute(query)
+
+        connection.commit()
+        # прикрываем соединение
+        connection.close()
+        print('[PostGreSQL INFO] tcalc UPDATE COMPLETE.')
+        print("[PostGreSQL INFO] Connection closed.")
+        # time.sleep(30 * 60)
+    else:
+        print("[PostGreSQL INFO] Error, couldn't get connection...")
+        print(f"\n[TCALC UPDATER] ERROR! Не удалось обновить таможенный калькулятор.")
