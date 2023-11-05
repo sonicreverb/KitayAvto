@@ -1,6 +1,6 @@
 import time
 import requests
-
+import zipfile
 import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -18,19 +18,83 @@ from database import execute_querry
 
 import os
 import logs
-import math
 import re
 
 HOST = 'https://www.che168.com'
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
+manifest_json = """
+{
+    "version": "1.0.0",
+    "manifest_version": 2,
+    "name": "Chrome Proxy",
+    "permissions": [
+        "proxy",
+        "tabs",
+        "unlimitedStorage",
+        "storage",
+        "<all_urls>",
+        "webRequest",
+        "webRequestBlocking"
+    ],
+    "background": {
+        "scripts": ["background.js"]
+    },
+    "minimum_chrome_version":"22.0.0"
+}
+"""
+
 
 # возвращает пустой драйвер
-def create_driver(images_enabled=False):
+def create_driver(images_enabled=False, proxy_data=None):
     # оключение загрузки изображений для оптимизации
     chrome_options = Options()
     if not images_enabled:
         chrome_options.add_argument(f"--blink-settings=imagesEnabled=false")
+
+    # подключение прокси
+    if proxy_data:
+        proxy_host = proxy_data.get('host')
+        proxy_port = proxy_data.get('port')
+        proxy_username = proxy_data.get('login')
+        proxy_password = proxy_data.get('password')
+
+        background_js = """
+        var config = {
+                mode: "fixed_servers",
+                rules: {
+                singleProxy: {
+                    scheme: "http",
+                    host: "%s",
+                    port: parseInt(%s)
+                },
+                bypassList: ["localhost"]
+                }
+            };
+
+        chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+
+        function callbackFn(details) {
+            return {
+                authCredentials: {
+                    username: "%s",
+                    password: "%s"
+                }
+            };
+        }
+
+        chrome.webRequest.onAuthRequired.addListener(
+                    callbackFn,
+                    {urls: ["<all_urls>"]},
+                    ['blocking']
+        );
+        """ % (proxy_host, proxy_port, proxy_username, proxy_password)
+        pluginfile = 'proxy_auth_plugin.zip'
+
+        with zipfile.ZipFile(pluginfile, 'w') as zp:
+            zp.writestr("manifest.json", manifest_json)
+            zp.writestr("background.js", background_js)
+        chrome_options.add_extension(pluginfile)
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     print('[DRIVER INFO] Driver created successfully.\n')
