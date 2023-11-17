@@ -31,9 +31,9 @@ def activity_validation():
 
 
 # получение ссылок на товары, находящиеся в categories_urls_files, их парсинг и запись в БД
-def parsing_process(categories_urls_file, products_urls_file, proxyData):
-    parser.get_target_urls(categories_urls_file, products_urls_file)
-    driver = parser.create_driver(images_enabled=True, proxy_data=proxyData)
+def parsing_process(categories_urls_file, products_urls_file, proxy_data):
+    parser.get_target_urls(categories_urls_file, products_urls_file, proxy_data=proxy_data)
+    driver = parser.create_driver(images_enabled=True, proxy_data=proxy_data)
     driver.get('https://duckduckgo.com')
 
     try:
@@ -62,8 +62,8 @@ def parsing_process(categories_urls_file, products_urls_file, proxyData):
                 data = parser.get_data(driver, url)
 
                 if data:
-                    successful_prods_count += 1
                     db.write_productdata_to_db(data)
+                    successful_prods_count += 1
                     print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
                           f'Data was obtained successfully!\n{data}')
                 else:
@@ -78,7 +78,7 @@ def parsing_process(categories_urls_file, products_urls_file, proxyData):
                 if len(driver.window_handles) == 0 or driver is None or driver.service.process is None:
                     print('[PARSING RPOCESS] Recreating driver.')
                     logs.log_info('[PARSING RPOCESS] Recreating driver.')
-                    driver = parser.create_driver(images_enabled=True, proxy_data=proxyData)
+                    driver = parser.create_driver(images_enabled=True, proxy_data=proxy_data)
                     driver.get('https://duckduckgo.com')
     except Exception as ex:
         print(ex)
@@ -98,8 +98,8 @@ if __name__ == '__main__':
         ip, port, login, password = data.split(":")
         proxy_list.append({'host': ip, 'port': port, 'login': login, 'password': password})
 
-    TOTAL_PARSING_PROCCESSES_NUM = 3
-    while len(proxy_list < TOTAL_PARSING_PROCCESSES_NUM):
+    TOTAL_PARSING_PROCESSES_NUM = 3
+    while len(proxy_list) <= TOTAL_PARSING_PROCESSES_NUM:
         proxy_list.append(None)
 
     # поток для валидации активности
@@ -113,11 +113,12 @@ if __name__ == '__main__':
                                              args=('categories_urls_to_parse_2.txt', 'product_urls_to_parse_2.txt',
                                                    proxy_list[1]), name='parserProccess2')
     parserProcess3 = multiprocessing.Process(target=parsing_process,
-                                             args=('categories_urls_to_parse_2.txt', 'product_urls_to_parse_2.txt',
-                                                   proxy_list[2]), name='parserProccess2')
+                                             args=('categories_urls_to_parse_3.txt', 'product_urls_to_parse_3.txt',
+                                                   proxy_list[2]), name='parserProccess3')
     try:
         begin_session_time = datetime.datetime.now()
         activValThread.start()
+        send_notification(f'[KITAY AVTO] Запущено обновление активности ({datetime.datetime.now()})')
 
         parserProcess1.start()
         parserProcess2.start()

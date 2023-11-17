@@ -441,6 +441,7 @@ def delete_unactive_positions():
 
 # возвращает текущий курс юань
 def get_cny_rate():
+    return 12
     try:
         rates = ExchangeRates()
         cny_to_rub_rate = rates['CNY'].value
@@ -542,3 +543,6 @@ def update_tcalc():
     else:
         print("[PostGreSQL INFO] Error, couldn't get connection...")
         print(f"\n[TCALC UPDATER] ERROR! Не удалось обновить таможенный калькулятор.")
+    execute_querry("DELETE FROM vehicles_data WHERE unactive_since <= NOW() - INTERVAL '1 day'",
+                   data_returned=False)
+

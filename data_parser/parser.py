@@ -131,6 +131,7 @@ def translate_text(text, target_language):
 
 # возвращает текущий курс юань
 def get_cny_rate():
+    return 12
     try:
         rates = ExchangeRates()
         cny_to_rub_rate = rates['CNY'].value
@@ -161,9 +162,9 @@ def get_data(driver, url):
         logs.log_info(f'[GET DATA] ({current_process_name}) Current product {name}, ({url}).')
 
         # проверка на дубликат
-        if name in execute_querry('SELECT name FROM vehicles_data', True):
-            print('[GET DATA] Error. Vehicle with this name already exist in DB.')
-            logs.log_warning('[GET DATA] Error. Vehicle with this name already exist in DB.')
+        if url in execute_querry('SELECT url FROM vehicles_data', True):
+            print('[GET DATA] Error. Vehicle with this url already exist in DB.')
+            logs.log_warning('[GET DATA] Error. Vehicle with this url already exist in DB.')
             return None
 
         # ЦЕНА
@@ -426,13 +427,13 @@ def get_product_links_from_page(driver, products_urls_file: str):
 
 
 # запись всех активных ссылок для парсинга в файл
-def get_target_urls(categories_urls_file: str, products_urls_file: str):
+def get_target_urls(categories_urls_file: str, products_urls_file: str, proxy_data: dict):
     # очистка содержимого product_urls_to_parse.txt
     with open(os.path.join(BASE_DIR, "data_parser", "links", products_urls_file), "w"):
         pass
 
     # создаём и открываем окно браузера
-    driver = create_driver()
+    driver = create_driver(proxy_data=proxy_data)
     driver.get(HOST)
     current_process_name = current_process().name
     with open(os.path.join(BASE_DIR, 'data_parser', 'links', categories_urls_file)) as ca_input:
@@ -453,7 +454,7 @@ def get_target_urls(categories_urls_file: str, products_urls_file: str):
                 if len(driver.window_handles) == 0 or driver is None or driver.service.process is None:
                     print('[PARSING RPOCESS] Recreating driver.')
                     logs.log_info('[PARSING RPOCESS] Recreating driver.')
-                    driver = create_driver(images_enabled=True)
+                    driver = create_driver(proxy_data=proxy_data)
                     driver.get('https://duckduckgo.com')
         kill_driver(driver)
 

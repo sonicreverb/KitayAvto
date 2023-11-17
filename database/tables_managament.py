@@ -75,3 +75,6 @@ def upload_file_to_ftp(filename):
             ftp.storbinary(f'STOR {remote_file_path}', file)
             print('[FTP INFO] Result table was uploaded successfully!')
             logs.log_info('[FTP INFO] Result table was uploaded successfully!')
+
+
+write_data_to_xlsx('SELECT * FROM vehicles_data', 'test.xlsx')
