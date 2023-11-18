@@ -59,13 +59,13 @@ def parsing_process(categories_urls_file, products_urls_file, proxy_data):
                 print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
                       f'Proseccing product with URL: {url}')
                 driver.execute_script('window.location.href = arguments[0];', url)
-                data = parser.get_data(driver, url)
+                product_data = parser.get_data(driver, url)
 
-                if data:
-                    db.write_productdata_to_db(data)
+                if product_data:
+                    db.write_productdata_to_db(product_data)
                     successful_prods_count += 1
                     print(f'[PARSING PROCESS] ({current_process_name}) {successful_prods_count}/{total_products_num} '
-                          f'Data was obtained successfully!\n{data}')
+                          f'Data was obtained successfully!\n{product_data}')
                 else:
                     invalid_links_file = open(os.path.join(parser.BASE_DIR, 'data_parser', 'links',
                                                            'invalid_links.txt'), 'a+', encoding='utf-8')
@@ -139,6 +139,7 @@ if __name__ == '__main__':
 
         send_notification(f'[KITAY AVTO] Парсинг завершён! ({datetime.datetime.now()})')
 
+        parser.delete_tmp_imgs()
         tables.write_data_to_xlsx('SELECT * FROM vehicles_data;', 'KitayAvto_output.xlsx')
         tables.upload_file_to_ftp('KitayAvto_output.xlsx')
         end_session_time = datetime.datetime.now()

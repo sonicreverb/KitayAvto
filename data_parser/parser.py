@@ -11,10 +11,10 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 from bs4 import BeautifulSoup
 from googletrans import Translator
-from pycbrf import ExchangeRates
 from word2number import w2n
 from multiprocessing import current_process
 from database import execute_querry
+from database.tables_managament import upload_imgs_to_ftp, delete_tmp_imgs
 
 import os
 import logs
@@ -129,16 +129,29 @@ def translate_text(text, target_language):
     return translated.text
 
 
-# возвращает текущий курс юань
+# возвращает текущий курс юань TODO перенести пересчёт по курсу перед записью в БД
 def get_cny_rate():
     return 12
-    try:
-        rates = ExchangeRates()
-        cny_to_rub_rate = rates['CNY'].value
-        return float(cny_to_rub_rate)
-    except Exception as _ex:
-        logs.log_error(f"[GET CNY RATE] Error while trying to get current course {_ex}")
-        raise SystemExit(-1)
+    # try:
+    #     rates = ExchangeRates()
+    #     cny_to_rub_rate = rates['CNY'].value
+    #     return float(cny_to_rub_rate)
+    # except Exception as _ex:
+    #     logs.log_error(f"[GET CNY RATE] Error while trying to get current course {_ex}")
+    #     raise SystemExit(-1)
+
+
+def download_image(image_url):
+    image_name = image_url[image_url.rfind('/') + 1:]
+    image_path = os.path.join(BASE_DIR, 'database', 'tmp_images', image_name)
+
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        with open(image_path, 'wb') as file:
+            file.write(response.content)
+        logs.log_info(f"[IMAGES DOWNLOAD] Image was downloaded succsfully! {image_url}")
+    else:
+        print(f"Ошибка {response.status_code}. Изображение не может быть загружено.")
 
 
 # возвращает словарь product_data с данными о товаре указанной страницы
@@ -344,7 +357,11 @@ def get_data(driver, url):
             if img == 'x.autoimg.cn/2scimg/m/20221226/default-che168.png':
                 print("[GET DATA] Images wasn't load correctly...")
                 logs.log_warning(f"[GET DATA] Images wasn't load correctly... ({current_process_name}), {url}")
-            img_li.append('https:' + img.get('src'))
+            image_url = 'https:' + img.get('src')[:-5]
+            img_li.append(image_url)
+            download_image(image_url)
+        upload_imgs_to_ftp(img_li)
+        # delete_tmp_imgs()
 
         # ИТОГОВЫЙ СЛОВАРЬ С ДАННЫМИ ПОЗИЦИИ
         product_data = {'Name': name, 'Producer': producer, 'TMP_model': model, 'PriceRU': price_ru,
