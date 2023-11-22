@@ -9,6 +9,7 @@ import logs
 import os.path
 import database.tables_managament as tables
 
+from selenium.common.exceptions import InvalidSessionIdException
 from telegram_alerts import send_notification
 
 
@@ -32,7 +33,7 @@ def activity_validation():
     logs.log_info(f'[ACTIVITY VALIDATION] ({threading.current_thread().name}) Activity validation complete.')
 
 
-TIMEOUT_SECONDS = 200
+TIMEOUT_SECONDS = 120
 
 
 # функция для запуска в отдельном потоке, которая проверяет находиться ли драйвер больше чем duration секунд
@@ -47,11 +48,13 @@ def timeout_validation(driver, duration=TIMEOUT_SECONDS):
 
         logs.log_warning(f'[TIMEOUT VALIDATION] ({threading.current_thread().name}) '
                          f'Driver was closed as the page processing time exceeded. {old_url}')
-        raise TimeoutError("Driver timeout")
+
+        driver.close()
+        # raise TimeoutError("Driver timeout")
     else:
-        logs.log_warning(f'[TIMEOUT VALIDATION] ({threading.current_thread().name}) '
-                         f'The driver successfully processed the page within the specified time. '
-                         f'{old_url}')
+        logs.log_info(f'[TIMEOUT VALIDATION] ({threading.current_thread().name}) '
+                      f'The driver successfully processed the page within the specified time. '
+                      f'{old_url}')
 
 
 # получение ссылок на товары, находящиеся в categories_urls_files, их парсинг и запись в БД
@@ -102,7 +105,7 @@ def parsing_process(categories_urls_file, products_urls_file, proxy_data):
                     invalid_links_file.write(url + "\n")
                     invalid_links_file.close()
                     total_products_num -= 1
-            except TimeoutError:
+            except InvalidSessionIdException:
                 total_products_num -= 1
                 print('[PARSING PROCESS] Driver timeout.')
                 logs.log_info('[PARSING PROCESS] Driver timeout.')
