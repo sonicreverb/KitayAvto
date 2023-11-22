@@ -88,7 +88,6 @@ def parsing_process(categories_urls_file, products_urls_file, proxy_data):
                 timeoutValThread = threading.Thread(target=timeout_validation, name='TimeoutValidationThread',
                                                     args=(driver, TIMEOUT_SECONDS))
                 timeoutValThread.start()
-                timeout_validation(driver, TIMEOUT_SECONDS)
 
                 product_data = parser.get_data(driver, url)
 
@@ -146,7 +145,7 @@ if __name__ == '__main__':
 
     parserProcess1 = multiprocessing.Process(target=parsing_process,
                                              args=('categories_urls_to_parse_1.txt', 'product_urls_to_parse_1.txt',
-                                                   proxy_list[0]), name='parserProccess1')
+                                                   proxy_list[2]), name='parserProccess1')
 
     parserProcess2 = multiprocessing.Process(target=parsing_process,
                                              args=('categories_urls_to_parse_2.txt', 'product_urls_to_parse_2.txt',
@@ -156,21 +155,21 @@ if __name__ == '__main__':
                                                    proxy_list[2]), name='parserProccess3')
     try:
         begin_session_time = datetime.datetime.now()
-        activValThread.start()
+        # activValThread.start()
         send_notification(f'[KITAY AVTO] Запущено обновление активности ({datetime.datetime.now()})')
 
         parserProcess1.start()
-        parserProcess2.start()
+        # parserProcess2.start()
         # parserProcess3.start()
 
-        activValThread.join()
+        # activValThread.join()
         print('Обновление активности завершено.')
         logs.log_warning('Обновление активности завершено.')
         send_notification(f'[KITAY AVTO] Обновление активности завершено ({datetime.datetime.now()})')
 
-        parserProcess1.join()
+        # parserProcess1.join()
         print('Первый процесс парсинга завершён.')
-        parserProcess2.join()
+        # parserProcess2.join()
         print('Второй процесс парсинга завершён.')
         # parserProcess3.join()
         print('Третий процесс парсинга завершён.')
